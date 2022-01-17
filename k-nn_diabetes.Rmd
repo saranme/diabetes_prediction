@@ -1,0 +1,250 @@
+---
+title: "k-nn_diabetes"
+author: "sara navarro medina"
+date: "11/01/2022"
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+num_analisis <- function(x) {
+  x_range <- paste("El rango está entre", range(x)[1], "y", range(x)[2])
+  x_std <- paste("La desviación estándard es de", round(sd(x),2))
+  x_summ <- summary(x)
+  x_table <- sort(table(x), decreasing = TRUE)
+  prop_x_table <- sort(round(prop.table(x_table) * 100, 2), decreasing = TRUE)
+  n_x_table <- paste0("La cantidad de valores únicos es de ", 
+                      dim(x_table),
+                      ".",
+                      ifelse(dim(x_table)>30, 
+                      " Sólo se muestran las veces que aparecen los 5 valores más comunes.",
+                      ""))
+  ifelse(dim(table(x)) > 30, 
+         prop_x_table <- prop_x_table[1:5], 
+                         prop_x_table)
+  ifelse(dim(table(x)) > 30, 
+         x_table <- sort(table(x)[1:5],decreasing = TRUE), 
+                    x_table)
+  my_list <- list(x_range, 
+                  x_std, 
+                  x_summ, 
+                  n_x_table, 
+                  list("Número de veces que aparecen los valores:",x_table), 
+                  list("Porcentaje de veces que aparencen los valores:", prop_x_table))
+  return (my_list)
+}
+
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+conf_matrix_results <- function(df_train,df_test,df_train_labels) {
+  results <- list()
+  for (value in 1:160) {
+    df_test_pred <- knn(train = df_train, test = df_test, cl = df_train_labels, k=value)
+    val_k <- value
+    # confusion matrix
+    conf_matrix <- CrossTable(x = df_test_labels, y = df_test_pred, prop.chisq = FALSE)
+    true_neg <- conf_matrix$t[1]
+    false_neg <- conf_matrix$t[2]
+    false_pos <- conf_matrix$t[3]
+    true_pos <- conf_matrix$t[4]
+    result <- list(val_k,true_neg, true_pos, false_neg, false_pos)
+    results <- append(list(result),results)
+  }
+  dataf <- data.frame(matrix(unlist(results), ncol = 5, byrow = TRUE))
+  names(dataf) <- c("K","True negative","True positive", "False negative","False positive")
+  return(dataf)
+}
+```
+
+```{r}
+# libraries
+library(class)
+library(gmodels)
+library(dplyr)
+
+# sample of 532 adult patients used to conduct a study on diabetes.
+df1 = MASS :: Pima.tr 
+df2 = MASS :: Pima.te
+head(df1)
+head(df2)
+```
+```{r}
+df <- rbind(df1,df2)
+head(df)
+```
+```{r}
+str(df)
+```
+
+```{r}
+dim(df)
+```
+
+# Univariate analysis
+### npreg: number of pregnancies
+```{r}
+num_analisis(df$npreg)
+```
+
+### glu: glucose concentration
+```{r}
+num_analisis(df$glu)
+```
+
+### bp: blood pressure (mm Hg)
+```{r}
+num_analisis(df$bp)
+```
+
+### skin: triceps skinfold thickness (mm)
+```{r}
+num_analisis(df$skin)
+```
+
+### bmi: body mass index (weight in kg/height in m2)
+```{r}
+num_analisis(df$bmi)
+```
+
+### pedigree: diabetes pedigree
+```{r}
+num_analisis(df$ped)
+```
+
+### age
+```{r}
+num_analisis(df$age)
+```
+
+### type: diabetes yes or no
+```{r}
+table(df$type)
+round(prop.table(table(df$type)),2)
+```
+
+```{r}
+# Check nulls per variable.
+lapply(df,function(x) { length(which(is.na(x)))})
+```
+There are no null variables for any variables.
+
+# Transformation variables - normalization of numerical data
+```{r}
+# Creación de dataframe para transformar variables numéricas con normalización
+df_n <- as.data.frame(lapply(df[, names(df) != "type"], normalize))
+```
+
+I confirm normalization has been applied:
+```{r}
+summary(df_n)
+```
+
+# Preparation of normalized data - creation of train and test datasets
+```{r}
+limit_train <- round(0.7*nrow(df),0)
+df_train <- df_n[1:limit_train,]
+df_test <- df_n[(limit_train + 1) : nrow(df_n),]
+
+df_train_labels <- df[1:limit_train, "type"]
+df_test_labels <- df[(limit_train + 1) : nrow(df_n), "type"]
+```
+
+# Application of the model
+### Choice of first K - square root of number of samples
+```{r}
+k <- round(sqrt(nrow(df)),0)
+df_test_pred <- knn(train = df_train, test = df_test, cl = df_train_labels, k=k)
+```
+
+# Model performance evaluation
+```{r}
+CrossTable(x = df_test_labels, y = df_test_pred, prop.chisq = FALSE)
+```
+
+True Negatives: 104 patients (65% of total patients) are predicted and confirmed to not have diabetes.
+
+True positives: it is predicted and correct that 29 patients (18.1% of the total patients) do not have diabetes and are correct.
+
+83.1% of the patients have been correctly predicted.
+
+False positives: 8 patients (5% of total patients) are wrongly predicted to have diabetes.
+False negatives: 19 patients (11.9% of total patients) are erroneously predicted not to have diabetes.
+
+16.9% of patients have been incorrectly predicted and 11.9% of these have a higher risk.
+False negatives are more dangerous since the patient actually has a disease that should be treated.
+
+# Improved model performance
+
+### Testing different values of *K* with normalized numerical data
+```{r}
+# Confusion matrix for different values of K
+tab <- conf_matrix_results(df_train,df_test,df_train_labels)
+tab <- tab %>% arrange(desc("True negative"),desc("True positive","False negative","False positive"))
+tab
+```
+```{r}
+# Observation of results with the lowest values of K after not having a considerable difference with the rest of the values of K
+filter(tab, K < 20)
+```
+```{r}
+# Observation of results with smaller type I errors
+filter(tab, `False negative` < 25)
+```
+K = 8 seems to be one of the best results
+
+### Transformation variables (z-score standardization) and test of different values of *K*
+```{r}
+# Dataframe creation to transform numeric variables with z-score
+df_z <- as.data.frame(scale(df[, names(df) != "type"]))
+summary(df_z)
+```
+```{r}
+# Transformation of numerical variables with z-score
+df_train_z <- df_z[1:limit_train,]
+df_test_z <- df_z[(limit_train + 1) : nrow(df_z),]
+
+k <- round(sqrt(nrow(df)),0)
+df_test_pred_z <- knn(train = df_train_z, test = df_test_z, cl = df_train_labels, k=k)
+
+CrossTable(x = df_test_labels, y = df_test_pred_z, prop.chisq = FALSE)
+```
+2 more errors are made transforming variables with z-score (1 error in false negative and 1 error in false positive).
+
+```{r}
+# Confusion matrix for different values of K
+tab_z <- conf_matrix_results(df_train_z,df_test_z,df_train_labels)
+tab_z <- tab_z %>% arrange(desc("True negative"),desc("True positive","False negative","False positive"))
+tab_z
+```
+```{r}
+# Observation of results with the lowest values of K after not having a considerable difference with the rest of the values of K
+filter(tab_z, K < 20)
+```
+```{r}
+# Observation of results with smaller type I errors
+filter(tab_z, `False negative` < 25)
+```
+# Conclusion
+I choose to transform the variables with normalization and a *K* = 8 for having a high number of hits and a low and balanced number of type I and II errors.
+```{r}
+# Choice of K = 8 for having a high number of correct answers and a balanced number of type I and type II errors
+df_test_pred_def <- knn(train = df_train, test = df_test, cl = df_train_labels, k=8)
+CrossTable(x = df_test_labels, y = df_test_pred_def, prop.chisq = FALSE)
+```
+
+True negatives: 101 patients (63.1% of total patients) are predicted and confirmed to not have diabetes.
+
+True positives: it is predicted and correct that 29 patients (18.1% of the total patients) do not have diabetes and are correct.
+
+False positives: 11 patients (6.9% of total patients) are wrongly predicted to have diabetes.
+False negatives: 19 patients (11.9% of total patients) are erroneously predicted not to have diabetes.
+False negatives are more dangerous since the patient actually has a disease that should be treated.
+
+**80% of the patients have been correctly predicted and 20% of the patients have been incorrectly predicted.**
+**It should be noted that 11.9% of patients would be at risk when predicting that they do not have diabetes when they actually have diabetes.**
