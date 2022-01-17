@@ -53,11 +53,11 @@ conf_matrix_results <- function(df_train,df_test,df_train_labels) {
     false_neg <- conf_matrix$t[2]
     false_pos <- conf_matrix$t[3]
     true_pos <- conf_matrix$t[4]
-    result <- list(val_k,true_neg, true_pos, false_neg, false_pos)
+    result <- list(val_k,true_neg, true_pos, true_neg + true_pos, false_neg, false_pos)
     results <- append(list(result),results)
   }
-  dataf <- data.frame(matrix(unlist(results), ncol = 5, byrow = TRUE))
-  names(dataf) <- c("K","True negative","True positive", "False negative","False positive")
+  dataf <- data.frame(matrix(unlist(results), ncol = 6, byrow = TRUE))
+  names(dataf) <- c("K","True_negative","True_positive", "True_total", "False_negative","False_positive")
   return(dataf)
 }
 ```
@@ -185,18 +185,14 @@ False negatives are more dangerous since the patient actually has a disease that
 ```{r}
 # Confusion matrix for different values of K
 tab <- conf_matrix_results(df_train,df_test,df_train_labels)
-tab <- tab %>% arrange(desc("True negative"),desc("True positive","False negative","False positive"))
+tab <- tab %>% arrange(desc(True_total), False_negative)
 tab
 ```
 ```{r}
-# Observation of results with the lowest values of K after not having a considerable difference with the rest of the values of K
-filter(tab, K < 20)
-```
-```{r}
 # Observation of results with smaller type I errors
-filter(tab, `False negative` < 25)
+filter(tab, False_negative < 25) %>% arrange(desc(True_total), False_negative)
 ```
-K = 8 seems to be one of the best results
+K = 26 seems to be one of the best results
 
 ### Transformation variables (z-score standardization) and test of different values of *K*
 ```{r}
@@ -219,32 +215,28 @@ CrossTable(x = df_test_labels, y = df_test_pred_z, prop.chisq = FALSE)
 ```{r}
 # Confusion matrix for different values of K
 tab_z <- conf_matrix_results(df_train_z,df_test_z,df_train_labels)
-tab_z <- tab_z %>% arrange(desc("True negative"),desc("True positive","False negative","False positive"))
+tab_z <- tab_z %>% arrange(desc(True_total), False_negative)
 tab_z
 ```
 ```{r}
-# Observation of results with the lowest values of K after not having a considerable difference with the rest of the values of K
-filter(tab_z, K < 20)
-```
-```{r}
 # Observation of results with smaller type I errors
-filter(tab_z, `False negative` < 25)
+filter(tab_z, False_negative < 25) %>% arrange(desc(True_total), False_negative)
 ```
 # Conclusion
-I choose to transform the variables with normalization and a *K* = 8 for having a high number of hits and a low and balanced number of type I and II errors.
+I choose to transform the variables with normalization and a *K* = 26 for having a high number of hits and a low and balanced number of type I and II errors.
 ```{r}
-# Choice of K = 8 for having a high number of correct answers and a balanced number of type I and type II errors
-df_test_pred_def <- knn(train = df_train, test = df_test, cl = df_train_labels, k=8)
+# Choice of K = 26 for having a high number of correct answers and a balanced number of type I and type II errors
+df_test_pred_def <- knn(train = df_train, test = df_test, cl = df_train_labels, k=26)
 CrossTable(x = df_test_labels, y = df_test_pred_def, prop.chisq = FALSE)
 ```
 
-True negatives: 101 patients (63.1% of total patients) are predicted and confirmed to not have diabetes.
+True negatives: 107 patients (66.9% of total patients) are predicted and confirmed to not have diabetes.
 
-True positives: it is predicted and correct that 29 patients (18.1% of the total patients) do not have diabetes and are correct.
+True positives: it is predicted and correct that 30 patients (18.8% of the total patients) do not have diabetes and are correct.
 
-False positives: 11 patients (6.9% of total patients) are wrongly predicted to have diabetes.
-False negatives: 19 patients (11.9% of total patients) are erroneously predicted not to have diabetes.
+False positives: 5 patients (3.1% of total patients) are wrongly predicted to have diabetes.
+False negatives: 18 patients (11.3% of total patients) are erroneously predicted not to have diabetes.
 False negatives are more dangerous since the patient actually has a disease that should be treated.
 
-**80% of the patients have been correctly predicted and 20% of the patients have been incorrectly predicted.**
-**It should be noted that 11.9% of patients would be at risk when predicting that they do not have diabetes when they actually have diabetes.**
+**85.7% of the patients have been correctly predicted and 14.4% of the patients have been incorrectly predicted.**
+**It should be noted that 11.3% of patients would be at risk when predicting that they do not have diabetes when they actually have diabetes.**
